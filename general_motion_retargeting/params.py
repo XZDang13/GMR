@@ -5,6 +5,7 @@ IK_CONFIG_ROOT = HERE / "ik_configs"
 ASSET_ROOT = HERE / ".." / "assets"
 
 ROBOT_XML_DICT = {
+    "unitree_g1_23dof": ASSET_ROOT / "unitree_g1" / "g1_mocap_23dof_rubber_hand.xml",
     "unitree_g1": ASSET_ROOT / "unitree_g1" / "g1_mocap_29dof.xml",
     "unitree_g1_with_hands": ASSET_ROOT / "unitree_g1" / "g1_mocap_29dof_with_hands.xml",
     "booster_t1": ASSET_ROOT / "booster_t1" / "t1_mocap.xml",
@@ -21,6 +22,7 @@ ROBOT_XML_DICT = {
 IK_CONFIG_DICT = {
     # offline data
     "smplx":{
+        "unitree_g1_23dof": IK_CONFIG_ROOT / "smplx_to_g1_23dof.json",
         "unitree_g1": IK_CONFIG_ROOT / "smplx_to_g1.json",
         "unitree_g1_with_hands": IK_CONFIG_ROOT / "smplx_to_g1.json",
         "booster_t1": IK_CONFIG_ROOT / "smplx_to_t1.json",
@@ -34,6 +36,7 @@ IK_CONFIG_DICT = {
         "booster_k1": IK_CONFIG_ROOT / "smplx_to_k1.json",
     },
     "bvh":{
+        "unitree_g1_23dof": IK_CONFIG_ROOT / "bvh_to_g1_23dof.json",
         "unitree_g1": IK_CONFIG_ROOT / "bvh_to_g1.json",
         "unitree_g1_with_hands": IK_CONFIG_ROOT / "bvh_to_g1.json",
         "booster_t1": IK_CONFIG_ROOT / "bvh_to_t1.json",
@@ -42,6 +45,7 @@ IK_CONFIG_DICT = {
         "engineai_pm01": IK_CONFIG_ROOT / "bvh_to_pm01.json",
     },
     "fbx":{
+        "unitree_g1_23dof": IK_CONFIG_ROOT / "fbx_to_g1_23dof.json",
         "unitree_g1": IK_CONFIG_ROOT / "fbx_to_g1.json",
         "unitree_g1_with_hands": IK_CONFIG_ROOT / "fbx_to_g1.json",
     },
