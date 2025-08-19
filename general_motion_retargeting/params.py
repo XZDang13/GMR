@@ -53,6 +53,7 @@ IK_CONFIG_DICT = {
 
 
 ROBOT_BASE_DICT = {
+    "unitree_g1_23dof": "pelvis",
     "unitree_g1": "pelvis",
     "unitree_g1_with_hands": "pelvis",
     "booster_t1": "Waist",
@@ -67,6 +68,7 @@ ROBOT_BASE_DICT = {
 }
 
 VIEWER_CAM_DISTANCE_DICT = {
+    "unitree_g1_23dof": 2.0,
     "unitree_g1": 2.0,
     "unitree_g1_with_hands": 2.0,
     "booster_t1": 2.0,
