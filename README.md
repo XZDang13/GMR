@@ -41,25 +41,24 @@ Starting from its release, **GMR** has been massively used by the community. See
  - [ ] add doc on ik config offset
  - [ ] support xsens data
 
-## News & Updates
 
-- **2025-10-15:** Now supporting [PAL Robotics' Talos](https://pal-robotics.com/robot/talos/), the 15th humanoid robot.
-- **2025-10-02:** Tech report for **GMR** is now on [arXiv](https://arxiv.org/abs/2510.02252).
-- **2025-10-01:** Now supporting converting **GMR** pickle files to CSV (for beyondmimic), check `scripts/batch_gmr_pkl_to_csv.py`.
-- **2025-09-25:** An introduction on **GMR** is available on [Bilibili](https://www.bilibili.com/video/BV1p1nazeEzC/?share_source=copy_web&vd_source=c76e3ab14ac3f7219a9006b96b4b0f76).
-- **2025-09-16:** Now supporting to use [GVHMR](https://github.com/zju3dv/GVHMR) for extracting human pose from **monocular video** and retargeting to robot.
-- **2025-09-12:** Now supporting [Tienkung](https://github.com/Open-X-Humanoid/TienKung-Lab), the 14th humanoid robot.
-- **2025-08-30:** Now supporting [Unitree H1 2](https://www.unitree.com/cn/h1) and [PND Adam Lite](https://pndbotics.com/), the 12th and 13th humanoid robots.
-- **2025-08-28:** Now supporting [Booster T1](https://www.boosterobotics.com/) for both 23dof and 29dof.
-- **2025-08-28:** Now supporting using exported offline FBX motion data from [OptiTrack](https://www.optitrack.com/). 
-- **2025-08-27:** Now supporting [Berkeley Humanoid Lite](https://github.com/HybridRobotics/Berkeley-Humanoid-Lite-Assets), the 11th humanoid robot.
-- **2025-08-24:** Now supporting [Unitree H1](https://www.unitree.com/h1/), the 10th humanoid robot.
-- **2025-08-24:** Now supporting velocity limits for the robot motors, `use_velocity_limit=True` by default in `GeneralMotionRetargeting` class (and we use 3*pi as the velocity limit by default); we also add printing of robot DoF/Body/Motor names and their IDs by default, and you can access them via `robot_dof_names`, `robot_body_names`, and `robot_motor_names` attributes.
-- **2025-08-10:** Now supporting [Booster K1](https://www.boosterobotics.com/), the 9th robot.
-- **2025-08-09:** Now supporting *Unitree G1 with Dex31 hands*.
-- **2025-08-07:** Now supporting [Galexea R1 Pro](https://galaxea-dynamics.com/) (a wheeled humanoid robot!) and [KUAVO](https://www.kuavo.ai/), the 7th and 8th humanoid robots.
-- **2025-08-06:** Now supporting [HighTorque Hi](https://www.hightorquerobotics.com/hi/), the 6th humanoid robot.
-- **2025-08-04:** Initial release of **GMR**. Check our [twitter post](https://x.com/ZeYanjie/status/1952446745696469334).
+# News & Updates
+- 2025-10-02: Tech report for GMR is now on [arXiv](https://arxiv.org/abs/2510.02252).
+- 2025-10-01: GMR now supports converting GMR pickle files to CSV (for beyondmimic), check `scripts/batch_gmr_pkl_to_csv.py`.
+- 2025-09-25: An introduction on GMR is available on [Bilibili](https://www.bilibili.com/video/BV1p1nazeEzC/?share_source=copy_web&vd_source=c76e3ab14ac3f7219a9006b96b4b0f76).
+- 2025-09-16: GMR now supports to use [GVHMR](https://github.com/zju3dv/GVHMR) for extracting human pose from **monocular video** and retargeting to robot.
+- 2025-09-12: GMR now supports [Tienkung](https://github.com/Open-X-Humanoid/TienKung-Lab), the 14th humanoid robot in the repo.
+- 2025-08-30: GMR now supports [Unitree H1 2](https://www.unitree.com/cn/h1) and [PND Adam Lite](https://pndbotics.com/), the 12th and 13th humanoid robots in the repo.
+- 2025-08-28: GMR now supports [Booster T1](https://www.boosterobotics.com/) for both 23dof and 29dof.
+- 2025-08-28: GMR now supports using exported offline FBX motion data from [OptiTrack](https://www.optitrack.com/). 
+- 2025-08-27: GMR now supports [Berkeley Humanoid Lite](https://github.com/HybridRobotics/Berkeley-Humanoid-Lite-Assets), the 11th humanoid robot in the repo.
+- 2025-08-24: GMR now supports [Unitree H1](https://www.unitree.com/h1/), the 10th humanoid robot in the repo.
+- 2025-08-24: GMR now supports velocity limits for the robot motors, `use_velocity_limit=True` by default in `GeneralMotionRetargeting` class (and we use 3*pi as the velocity limit by default); we also add printing of robot DoF/Body/Motor names and their IDs by default, and you can access them via `robot_dof_names`, `robot_body_names`, and `robot_motor_names` attributes.
+- 2025-08-10: GMR now supports [Booster K1](https://www.boosterobotics.com/), the 9th robot in the repo.
+- 2025-08-09: GMR now supports *Unitree G1 with Dex31 hands*.
+- 2025-08-07: GMR now supports [Galexea R1 Pro](https://galaxea-dynamics.com/) (this is a wheeled humanoid robot!) and [KUAVO](https://www.kuavo.ai/), the 7th and 8th humanoid robots in the repo.
+- 2025-08-06: GMR now supports [HighTorque Hi](https://www.hightorquerobotics.com/hi/), the 6th humanoid robot in the repo.
+- 2025-08-04: Initial release of GMR. Check our [twitter post](https://x.com/ZeYanjie/status/1952446745696469334).
 
 
 ## Demos
