@@ -37,7 +37,7 @@ Starting from its release, **GMR** has been massively used by the community. See
 - [arXiv 2025.05](https://arxiv.org/abs/2505.02833), *TWIST: Teleoperated Whole-Body Imitation System*
 
  # To Do List
- - [ ] add doc on ik config offset
+
  - [ ] support xsens data
 
 
