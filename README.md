@@ -36,13 +36,13 @@ Starting from its release, **GMR** has been massively used by the community. See
 - [arXiv 2025.08](https://arxiv.org/abs/2508.13444), *Switch4EAI: Leveraging Console Game Platform for Benchmarking Robotic Athletics*
 - [arXiv 2025.05](https://arxiv.org/abs/2505.02833), *TWIST: Teleoperated Whole-Body Imitation System*
 
-### To Do List
-
+ # To Do List
  - [ ] add doc on ik config offset
  - [ ] support xsens data
 
 
 # News & Updates
+- 2025-10-09: Check [TWIST](https://github.com/YanjieZe/TWIST) open-sourced code for RL motion tracking.
 - 2025-10-02: Tech report for GMR is now on [arXiv](https://arxiv.org/abs/2510.02252).
 - 2025-10-01: GMR now supports converting GMR pickle files to CSV (for beyondmimic), check `scripts/batch_gmr_pkl_to_csv.py`.
 - 2025-09-25: An introduction on GMR is available on [Bilibili](https://www.bilibili.com/video/BV1p1nazeEzC/?share_source=copy_web&vd_source=c76e3ab14ac3f7219a9006b96b4b0f76).
