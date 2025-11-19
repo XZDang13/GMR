@@ -80,6 +80,8 @@
                   <geom size="0.005" pos="-0.05 -0.025 -0.03" rgba="0.2 0.2 0.2 1" />
                   <geom size="0.005" pos="0.12 0.03 -0.03" rgba="0.2 0.2 0.2 1" />
                   <geom size="0.005" pos="0.12 -0.03 -0.03" rgba="0.2 0.2 0.2 1" />
+                  <site name="left_foot"/>
+                  <body name="left_toe_link" pos="0.1 0 -0.02"/>
                 </body>
               </body>
             </body>
@@ -119,6 +121,8 @@
                   <geom size="0.005" pos="-0.05 -0.025 -0.03" rgba="0.2 0.2 0.2 1" />
                   <geom size="0.005" pos="0.12 0.03 -0.03" rgba="0.2 0.2 0.2 1" />
                   <geom size="0.005" pos="0.12 -0.03 -0.03" rgba="0.2 0.2 0.2 1" />
+                  <site name="right_foot"/>
+                  <body name="right_toe_link" pos="0.1 0 -0.02"/>
                 </body>
               </body>
             </body>
