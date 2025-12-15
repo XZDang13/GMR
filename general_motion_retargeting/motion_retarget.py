@@ -72,6 +72,8 @@ class GeneralMotionRetargeting:
         
 
     def setup_retarget_configuration(self):
+        for i in range(self.model.njnt):
+            print(f"{i}: {self.model.joint(i).name}")
         self.configuration = mink.Configuration(self.model)
     
         self.tasks1 = []
