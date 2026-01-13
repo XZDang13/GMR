@@ -39,6 +39,7 @@ Starting from its release, **GMR** has been massively used by the community. See
 
 
 # News & Updates
+- **2025-12-02:** GMR now supports [TWIST2](https://yanjieze.com/TWIST2), which utilizes [XRoboToolkit SDK](https://github.com/XR-Robotics/XRoboToolkit-PC-Service).
 - **2025-11-17:** To join our community for discussions, you can add my WeChat contact [QR Code](https://yanjieze.com/TWIST2/images/my_wechat.jpg) with info like "[GMR] [Your Name] [Your Affiliation]".
 - **2025-11-08:** [MimicKit] from Jason Peng now supports GMR format. Check [here](https://github.com/xbpeng/MimicKit/tree/main/tools/gmr_to_mimickit).
 - **2025-10-15:** Now supporting [PAL Robotics' Talos](https://pal-robotics.com/robot/talos/), the 15th humanoid robot.
@@ -174,9 +175,10 @@ Starting from its release, **GMR** has been massively used by the community. See
 | 14 | PND Adam Lite `pnd_adam_lite`  | Leg (2\*6) + Waist (3) + Arm (2\*5) = 25 | ✅ | TBD | TBD | TBD |
 | 15 | Tienkung `tienkung`  | Leg (2\*6) + Arm (2\*4) = 20 | ✅ | TBD | TBD | TBD |
 | 16 | PAL Robotics' Talos `pal_talos`  | Head (2) + Arm (2\*7) + Waist (2) + Leg (2\*6) = 30 | ✅ | TBD | TBD | TBD |
+| 17 | Fourier GR3 `fourier_gr3`  | Head (2) + Arm (2\*7) + Waist (3) + Leg (2\*6) = 31 | ✅ | TBD | TBD | TBD |
 | More robots coming soon ! |
-| 16 | AgiBot A2 `agibot_a2` | TBD | TBD | TBD | TBD | TBD |
-| 17 | OpenLoong `openloong` | TBD | TBD | TBD | TBD | TBD |
+| 18 | AgiBot A2 `agibot_a2` | TBD | TBD | TBD | TBD | TBD |
+| 19 | OpenLoong `openloong` | TBD | TBD | TBD | TBD | TBD |
 
 
 
