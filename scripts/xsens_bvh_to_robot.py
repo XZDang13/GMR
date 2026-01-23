@@ -66,7 +66,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--scale",
-        default=1,
+        default=0.01,
         type=float,
         help="The scaling size is determined based on the units used for displacement",
     )
