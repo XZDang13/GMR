@@ -13,6 +13,8 @@
         "right_hip": 0.9,
         "left_knee": 0.9,
         "right_knee": 0.9,
+        "left_ankle": 0.9,
+        "right_ankle": 0.9,
         "left_foot": 0.9,
         "right_foot": 0.9,
 
@@ -73,6 +75,22 @@
                 -0.5
             ]
         ],
+        "left_ankle_roll_link": [
+            "left_ankle",
+            50,
+            0,
+            [
+                0.0,
+                0.0,
+                0.0
+            ],
+            [
+                0.5,
+                -0.5,
+                -0.5,
+                -0.5
+            ]
+        ],
         "left_toe_link": [
             "left_foot",
             100,
@@ -109,6 +127,22 @@
             "right_knee",
             0,
             10,
+            [
+                0.0,
+                0.0,
+                0.0
+            ],
+            [
+                0.5,
+                -0.5,
+                -0.5,
+                -0.5
+            ]
+        ],
+        "right_ankle_roll_link": [
+            "right_ankle",
+            50,
+            0,
             [
                 0.0,
                 0.0,
@@ -300,6 +334,17 @@
                 -0.5
             ]
         ],
+        "left_ankle_roll_link": [
+            "left_ankle",
+            50,
+            0,
+            [
+                0.0,
+                0.0,
+                0.0
+            ],
+            [ -0.5, 0.5, 0.5, 0.5 ]
+        ],
         "left_toe_link": [
             "left_foot",
             100,
@@ -342,6 +387,17 @@
                 -0.5,
                 -0.5
             ]
+        ],
+        "right_ankle_roll_link": [
+            "right_ankle",
+            50,
+            0,
+            [
+                0.0,
+                0.0,
+                0.0
+            ],
+            [ -0.5, 0.5, 0.5, 0.5 ]
         ],
         "right_toe_link": [
             "right_foot",
