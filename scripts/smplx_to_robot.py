@@ -7,6 +7,12 @@ import numpy as np
 
 from general_motion_retargeting import GeneralMotionRetargeting as GMR
 from general_motion_retargeting import RobotMotionViewer
+from general_motion_retargeting.tracking_filter import (
+    compute_position_tracking_errors,
+    evaluate_tracking_errors,
+    format_tracking_result,
+    get_position_tracking_matches,
+)
 from general_motion_retargeting.utils.smpl import load_smplx_file, get_smplx_data_offline_fast
 
 from rich import print
@@ -63,6 +69,24 @@ if __name__ == "__main__":
         action="store_true",
         help="Limit the rate of the retargeted robot motion to keep the same as the human motion.",
     )
+    parser.add_argument(
+        "--track_error_threshold",
+        default=0.2,
+        type=float,
+        help="Reject saved motions when the tracking error percentile exceeds this threshold in meters.",
+    )
+    parser.add_argument(
+        "--track_error_percentile",
+        default=95,
+        type=float,
+        help="Percentile of per-frame worst body tracking error used by the rejection filter.",
+    )
+    parser.add_argument(
+        "--disable_track_filter",
+        default=False,
+        action="store_true",
+        help="Disable the tracking-error rejection filter.",
+    )
 
     args = parser.parse_args()
 
@@ -86,6 +110,8 @@ if __name__ == "__main__":
         src_human="smplx",
         tgt_robot=args.robot,
     )
+    tracking_matches = get_position_tracking_matches(retarget)
+    tracking_frame_errors = []
     
     robot_motion_viewer = RobotMotionViewer(robot_type=args.robot,
                                             motion_fps=aligned_fps,
@@ -131,6 +157,10 @@ if __name__ == "__main__":
 
         # retarget
         qpos = retarget.retarget(smplx_data)
+        if not args.disable_track_filter:
+            tracking_frame_errors.append(
+                compute_position_tracking_errors(retarget, tracking_matches)
+            )
 
         # visualize
         robot_motion_viewer.step(
@@ -146,9 +176,27 @@ if __name__ == "__main__":
         )
         if args.save_path is not None:
             qpos_list.append(qpos)
-            
+
+    tracking_result = None
+    if not args.disable_track_filter:
+        tracking_result = evaluate_tracking_errors(
+            tracking_frame_errors,
+            threshold=args.track_error_threshold,
+            percentile=args.track_error_percentile,
+        )
+        print(f"Tracking filter: {format_tracking_result(tracking_result)}")
+
     if args.save_path is not None:
         import pickle
+        if tracking_result is not None and not tracking_result.accepted:
+            print(
+                f"[REJECTED] {args.smplx_file}: "
+                f"{format_tracking_result(tracking_result)} "
+                f"({tracking_result.reason}). Not saving {args.save_path}"
+            )
+            robot_motion_viewer.close()
+            raise SystemExit(0)
+
         root_pos = np.array([qpos[:3] for qpos in qpos_list])
         # save from wxyz to xyzw
         root_rot = np.array([qpos[3:7][[1,2,3,0]] for qpos in qpos_list])

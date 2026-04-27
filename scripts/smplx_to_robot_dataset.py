@@ -17,6 +17,12 @@ from general_motion_retargeting import GeneralMotionRetargeting as GMR
 from general_motion_retargeting.utils.smpl import load_smplx_file, get_smplx_data_offline_fast
 from general_motion_retargeting.kinematics_model import KinematicsModel
 from general_motion_retargeting import IK_CONFIG_ROOT
+from general_motion_retargeting.tracking_filter import (
+    compute_position_tracking_errors,
+    evaluate_tracking_errors,
+    format_tracking_result,
+    get_position_tracking_matches,
+)
 import gc
 import time
 import psutil
@@ -36,12 +42,39 @@ def check_memory(min_available_gb=4):  # adjust based on your available memory
 HERE = pathlib.Path(__file__).parent
 
 
-def process_file(smplx_file_path, tgt_file_path, tgt_robot, SMPLX_FOLDER, tgt_folder, total_files, min_available_memory_gb=4, verbose=False):
+def make_process_result(status, smplx_file_path, tgt_file_path=None, message=""):
+    return {
+        "status": status,
+        "src": smplx_file_path,
+        "tgt": tgt_file_path,
+        "message": message,
+    }
+
+
+def process_file(
+    smplx_file_path,
+    tgt_file_path,
+    tgt_robot,
+    SMPLX_FOLDER,
+    tgt_folder,
+    total_files,
+    min_available_memory_gb=4,
+    verbose=False,
+    track_error_threshold=0.2,
+    track_error_percentile=95,
+    disable_track_filter=False,
+):
     def log_memory(message):
         if verbose:
             process = psutil.Process(os.getpid())
             memory_usage = process.memory_info().rss / (1024 ** 3)  # Convert to GB
             print(f"[MEMORY] {message}: {memory_usage:.2f} GB")
+
+    def cleanup(stop_tracemalloc=True):
+        if stop_tracemalloc and verbose and tracemalloc.is_tracing():
+            tracemalloc.stop()
+        torch.cuda.empty_cache()
+        gc.collect()
     
     # Start memory tracking if verbose
     if verbose:
@@ -57,7 +90,8 @@ def process_file(smplx_file_path, tgt_file_path, tgt_robot, SMPLX_FOLDER, tgt_fo
         num_pause += 1
         if num_pause > 10:
             print(f"[ERROR] Memory usage is still high after 10 pauses. Exiting.")
-            return
+            cleanup()
+            return make_process_result("failed", smplx_file_path, tgt_file_path, "memory unavailable")
 
     try:
         smplx_data, body_model, smplx_output, actual_human_height = load_smplx_file(smplx_file_path, SMPLX_FOLDER)
@@ -65,7 +99,8 @@ def process_file(smplx_file_path, tgt_file_path, tgt_robot, SMPLX_FOLDER, tgt_fo
         log_memory("After loading SMPL-X data")
     except Exception as e:
         print(f"Error loading {smplx_file_path}: {e}")
-        return
+        cleanup()
+        return make_process_result("failed", smplx_file_path, tgt_file_path, str(e))
     
   
     tgt_fps = 30
@@ -73,7 +108,8 @@ def process_file(smplx_file_path, tgt_file_path, tgt_robot, SMPLX_FOLDER, tgt_fo
         smplx_frame_data_list, aligned_fps = get_smplx_data_offline_fast(smplx_data, body_model, smplx_output, tgt_fps=tgt_fps)
     except Exception as e:
         print(f"Error processing {smplx_file_path}: {e}")
-        return
+        cleanup()
+        return make_process_result("failed", smplx_file_path, tgt_file_path, str(e))
     
     # retarget
     retargeter = GMR(
@@ -81,75 +117,101 @@ def process_file(smplx_file_path, tgt_file_path, tgt_robot, SMPLX_FOLDER, tgt_fo
         tgt_robot=tgt_robot,
         actual_human_height=actual_human_height,
     )
+    tracking_matches = get_position_tracking_matches(retargeter)
+    tracking_frame_errors = []
     qpos_list = []
-    for smplx_frame_data in smplx_frame_data_list:
-        qpos = retargeter.retarget(smplx_frame_data)
-        qpos_list.append(qpos.copy())
+    try:
+        for smplx_frame_data in smplx_frame_data_list:
+            qpos = retargeter.retarget(smplx_frame_data)
+            qpos_list.append(qpos.copy())
+            if not disable_track_filter:
+                tracking_frame_errors.append(
+                    compute_position_tracking_errors(retargeter, tracking_matches)
+                )
+    except Exception as e:
+        print(f"Error retargeting {smplx_file_path}: {e}")
+        cleanup()
+        return make_process_result("failed", smplx_file_path, tgt_file_path, str(e))
 
     qpos_list = np.array(qpos_list)
 
     log_memory("After retargeting")
-    
-    device = "cuda:0"
-    kinematics_model = KinematicsModel(retargeter.xml_file, device=device)
 
+    if not disable_track_filter:
+        tracking_result = evaluate_tracking_errors(
+            tracking_frame_errors,
+            threshold=track_error_threshold,
+            percentile=track_error_percentile,
+        )
+        if not tracking_result.accepted:
+            print(
+                f"[REJECTED] {smplx_file_path}: "
+                f"{format_tracking_result(tracking_result)} "
+                f"({tracking_result.reason})"
+            )
+            cleanup()
+            return make_process_result(
+                "rejected",
+                smplx_file_path,
+                tgt_file_path,
+                format_tracking_result(tracking_result),
+            )
+    
     try:
+        device = "cuda:0"
+        kinematics_model = KinematicsModel(retargeter.xml_file, device=device)
         root_pos = qpos_list[:, :3]
+        root_rot = qpos_list[:, 3:7]
+        root_rot[:, [0, 1, 2, 3]] = root_rot[:, [1, 2, 3, 0]]
+        dof_pos = qpos_list[:, 7:]
+        num_frames = root_pos.shape[0]
+
+        fk_root_pos = torch.zeros((num_frames, 3), device=device)
+        fk_root_rot = torch.zeros((num_frames, 4), device=device)
+        fk_root_rot[:, -1] = 1.0
+
+        local_body_pos, _ = kinematics_model.forward_kinematics(
+            fk_root_pos, fk_root_rot, torch.from_numpy(dof_pos).to(device=device, dtype=torch.float)
+        )
+
+        log_memory("After forward kinematics")
+
+        body_names = kinematics_model.body_names
+        
+        HEIGHT_ADJUST = True
+        if HEIGHT_ADJUST:
+            # height adjust to ensure the lowerset part is on the ground
+            body_pos, _ = kinematics_model.forward_kinematics(torch.from_numpy(root_pos).to(device=device, dtype=torch.float), 
+                                                            torch.from_numpy(root_rot).to(device=device, dtype=torch.float), 
+                                                            torch.from_numpy(dof_pos).to(device=device, dtype=torch.float)) # TxNx3
+            ground_offset = 0.0
+            lowerst_height = torch.min(body_pos[..., 2]).item()
+            root_pos[:, 2] = root_pos[:, 2] - lowerst_height + ground_offset # make sure motion on the ground
+            
+        ROOT_ORIGIN_OFFSET = True
+        if ROOT_ORIGIN_OFFSET:
+            # offset using the first frame
+            root_pos[:, :2] -= root_pos[0, :2]
+            
+            
+        motion_data = {
+            "fps": aligned_fps,
+            "root_pos": root_pos,
+            "root_rot": root_rot,
+            "dof_pos": dof_pos,
+            "local_body_pos": local_body_pos.detach().cpu().numpy(),
+            "link_body_list": body_names,
+        }
+
+        os.makedirs(os.path.dirname(tgt_file_path), exist_ok=True)
+        with open(tgt_file_path, "wb") as f:
+            pickle.dump(motion_data, f)
     except Exception as e:
         print(f"Error processing {smplx_file_path}: {e}")
-        return
-    root_rot = qpos_list[:, 3:7]
-    root_rot[:, [0, 1, 2, 3]] = root_rot[:, [1, 2, 3, 0]]
-    dof_pos = qpos_list[:, 7:]
-    num_frames = root_pos.shape[0]
+        cleanup()
+        return make_process_result("failed", smplx_file_path, tgt_file_path, str(e))
 
-    fk_root_pos = torch.zeros((num_frames, 3), device=device)
-    fk_root_rot = torch.zeros((num_frames, 4), device=device)
-    fk_root_rot[:, -1] = 1.0
-
-    local_body_pos, _ = kinematics_model.forward_kinematics(
-        fk_root_pos, fk_root_rot, torch.from_numpy(dof_pos).to(device=device, dtype=torch.float)
-    )
-
-    log_memory("After forward kinematics")
-
-    body_names = kinematics_model.body_names
-    
-    HEIGHT_ADJUST = True
-    if HEIGHT_ADJUST:
-        # height adjust to ensure the lowerset part is on the ground
-        body_pos, _ = kinematics_model.forward_kinematics(torch.from_numpy(root_pos).to(device=device, dtype=torch.float), 
-                                                        torch.from_numpy(root_rot).to(device=device, dtype=torch.float), 
-                                                        torch.from_numpy(dof_pos).to(device=device, dtype=torch.float)) # TxNx3
-        ground_offset = 0.0
-        lowerst_height = torch.min(body_pos[..., 2]).item()
-        root_pos[:, 2] = root_pos[:, 2] - lowerst_height + ground_offset # make sure motion on the ground
-        
-    ROOT_ORIGIN_OFFSET = True
-    if ROOT_ORIGIN_OFFSET:
-        # offset using the first frame
-        root_pos[:, :2] -= root_pos[0, :2]
-        
-        
-    motion_data = {
-        "fps": aligned_fps,
-        "root_pos": root_pos,
-        "root_rot": root_rot,
-        "dof_pos": dof_pos,
-        "local_body_pos": local_body_pos.detach().cpu().numpy(),
-        "link_body_list": body_names,
-    }
-
-
-    os.makedirs(os.path.dirname(tgt_file_path), exist_ok=True)
-    with open(tgt_file_path, "wb") as f:
-        pickle.dump(motion_data, f)
-        
-    # Progress print based on tgt_folder
-    done = 0
-    for root, _, files in os.walk(tgt_folder):
-        done += len([f for f in files if f.endswith('.pkl')])
-    print(f"Processed {done}/{total_files}: {tgt_file_path}")
+    print(f"[SAVED] {tgt_file_path}")
     
     if verbose:
         # Get memory snapshot
@@ -163,8 +225,8 @@ def process_file(smplx_file_path, tgt_file_path, tgt_robot, SMPLX_FOLDER, tgt_fo
         tracemalloc.stop()
         
     # clean cache
-    torch.cuda.empty_cache()
-    gc.collect()
+    cleanup(stop_tracemalloc=False)
+    return make_process_result("saved", smplx_file_path, tgt_file_path)
     
 
 
@@ -182,6 +244,12 @@ def main():
     parser.add_argument("--num_cpus", default=4, type=int)
     parser.add_argument("--min_available_memory_gb", default=4, type=float,
                         help="Pause workers when system available RAM drops below this value.")
+    parser.add_argument("--track_error_threshold", default=0.2, type=float,
+                        help="Reject motions when the tracking error percentile exceeds this threshold in meters.")
+    parser.add_argument("--track_error_percentile", default=95, type=float,
+                        help="Percentile of per-frame worst body tracking error used by the rejection filter.")
+    parser.add_argument("--disable_track_filter", default=False, action="store_true",
+                        help="Disable the tracking-error rejection filter.")
     args = parser.parse_args()
     
     # print the total number of cpus and gpus
@@ -241,9 +309,28 @@ def main():
     total_files = len(args_list)
     print(f"Total number of files to process: {total_files}")
     with mp.Pool(args.num_cpus) as pool:
-        pool.starmap(process_file, [job_args + (total_files, args.min_available_memory_gb, verbose) for job_args in args_list])
+        results = pool.starmap(
+            process_file,
+            [
+                job_args + (
+                    total_files,
+                    args.min_available_memory_gb,
+                    verbose,
+                    args.track_error_threshold,
+                    args.track_error_percentile,
+                    args.disable_track_filter,
+                )
+                for job_args in args_list
+            ],
+        )
 
-    print("Done. Saved to ", tgt_folder)
+    saved = sum(1 for result in results if result and result["status"] == "saved")
+    rejected = sum(1 for result in results if result and result["status"] == "rejected")
+    failed = sum(1 for result in results if not result or result["status"] == "failed")
+    print(
+        f"Done. Saved to {tgt_folder}. "
+        f"saved={saved}, rejected={rejected}, failed={failed}"
+    )
 
 
 if __name__ == "__main__":
