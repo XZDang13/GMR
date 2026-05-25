@@ -19,7 +19,18 @@ class GeneralMotionRetargeting:
         damping: float=5e-1, # change from 1e-1 to 1e-2.
         verbose: bool=True,
         use_velocity_limit: bool=False,
+        ik_mode: str="adaptive",
+        max_iter: int=10,
+        min_improvement: float=1e-3,
+        task_weight_epsilon: float=0.0,
     ) -> None:
+        if ik_mode not in ("adaptive", "single-pass"):
+            raise ValueError(f"Unsupported ik_mode: {ik_mode}")
+        self.verbose = verbose
+        self.ik_mode = ik_mode
+        self.max_iter = max(0, int(max_iter))
+        self.min_improvement = float(min_improvement)
+        self.task_weight_epsilon = max(0.0, float(task_weight_epsilon))
 
         # load the robot model
         self.xml_file = str(ROBOT_XML_DICT[tgt_robot])
@@ -28,7 +39,8 @@ class GeneralMotionRetargeting:
         self.model = mj.MjModel.from_xml_path(self.xml_file)
         
         # Print DoF names in order
-        print("[GMR] Robot Degrees of Freedom (DoF) names and their order:")
+        if verbose:
+            print("[GMR] Robot Degrees of Freedom (DoF) names and their order:")
         self.robot_dof_names = {}
         for i in range(self.model.nv):  # 'nv' is the number of DoFs
             dof_name = mj.mj_id2name(self.model, mj.mjtObj.mjOBJ_JOINT, self.model.dof_jntid[i])
@@ -37,7 +49,8 @@ class GeneralMotionRetargeting:
                 print(f"DoF {i}: {dof_name}")
             
             
-        print("[GMR] Robot Body names and their IDs:")
+        if verbose:
+            print("[GMR] Robot Body names and their IDs:")
         self.robot_body_names = {}
         for i in range(self.model.nbody):  # 'nbody' is the number of bodies
             body_name = mj.mj_id2name(self.model, mj.mjtObj.mjOBJ_BODY, i)
@@ -45,7 +58,8 @@ class GeneralMotionRetargeting:
             if verbose:
                 print(f"Body ID {i}: {body_name}")
         
-        print("[GMR] Robot Motor (Actuator) names and their IDs:")
+        if verbose:
+            print("[GMR] Robot Motor (Actuator) names and their IDs:")
         self.robot_motor_names = {}
         for i in range(self.model.nu):  # 'nu' is the number of actuators (motors)
             motor_name = mj.mj_id2name(self.model, mj.mjtObj.mjOBJ_ACTUATOR, i)
@@ -80,8 +94,6 @@ class GeneralMotionRetargeting:
         self.human_scale_table = ik_config["human_scale_table"]
         self.ground = ik_config["ground_height"] * np.array([0, 0, 1])
 
-        self.max_iter = 10
-
         self.solver = solver
         self.damping = damping
 
@@ -91,6 +103,10 @@ class GeneralMotionRetargeting:
         self.rot_offsets1 = {}
         self.pos_offsets2 = {}
         self.rot_offsets2 = {}
+        self.root_frame_pos_offsets = {
+            key: np.array(value, dtype=float)
+            for key, value in ik_config.get("root_frame_position_offsets", {}).items()
+        }
 
         self.task_errors1 = {}
         self.task_errors2 = {}
@@ -105,8 +121,9 @@ class GeneralMotionRetargeting:
         self.ground_offset = 0.0
 
     def setup_retarget_configuration(self):
-        for i in range(self.model.njnt):
-            print(f"{i}: {self.model.joint(i).name}")
+        if self.verbose:
+            for i in range(self.model.njnt):
+                print(f"{i}: {self.model.joint(i).name}")
         self.configuration = mink.Configuration(self.model)
     
         self.tasks1 = []
@@ -114,7 +131,12 @@ class GeneralMotionRetargeting:
         
         for frame_name, entry in self.ik_match_table1.items():
             body_name, pos_weight, rot_weight, pos_offset, rot_offset = entry
-            if pos_weight != 0 or rot_weight != 0:
+            if self.should_store_offset(pos_weight, rot_weight, pos_offset, rot_offset):
+                self.pos_offsets1[body_name] = np.array(pos_offset) - self.ground
+                self.rot_offsets1[body_name] = R.from_quat(
+                    rot_offset, scalar_first=True
+                )
+            if self.should_create_task(pos_weight, rot_weight):
                 task = mink.FrameTask(
                     frame_name=frame_name,
                     frame_type="body",
@@ -123,16 +145,17 @@ class GeneralMotionRetargeting:
                     lm_damping=1,
                 )
                 self.human_body_to_task1[body_name] = task
-                self.pos_offsets1[body_name] = np.array(pos_offset) - self.ground
-                self.rot_offsets1[body_name] = R.from_quat(
-                    rot_offset, scalar_first=True
-                )
                 self.tasks1.append(task)
                 self.task_errors1[task] = []
         
         for frame_name, entry in self.ik_match_table2.items():
             body_name, pos_weight, rot_weight, pos_offset, rot_offset = entry
-            if pos_weight != 0 or rot_weight != 0:
+            if self.should_store_offset(pos_weight, rot_weight, pos_offset, rot_offset):
+                self.pos_offsets2[body_name] = np.array(pos_offset) - self.ground
+                self.rot_offsets2[body_name] = R.from_quat(
+                    rot_offset, scalar_first=True
+                )
+            if self.should_create_task(pos_weight, rot_weight):
                 task = mink.FrameTask(
                     frame_name=frame_name,
                     frame_type="body",
@@ -141,19 +164,36 @@ class GeneralMotionRetargeting:
                     lm_damping=1,
                 )
                 self.human_body_to_task2[body_name] = task
-                self.pos_offsets2[body_name] = np.array(pos_offset) - self.ground
-                self.rot_offsets2[body_name] = R.from_quat(
-                    rot_offset, scalar_first=True
-                )
                 self.tasks2.append(task)
                 self.task_errors2[task] = []
+
+    def should_create_task(self, pos_weight, rot_weight):
+        return (
+            abs(float(pos_weight)) > self.task_weight_epsilon
+            or abs(float(rot_weight)) > self.task_weight_epsilon
+        )
+
+    def should_store_offset(self, pos_weight, rot_weight, pos_offset, rot_offset):
+        if float(pos_weight) != 0.0 or float(rot_weight) != 0.0:
+            return True
+        pos_offset = np.asarray(pos_offset, dtype=float)
+        rot_offset = np.asarray(rot_offset, dtype=float)
+        return (
+            np.linalg.norm(pos_offset) > 0.0
+            or np.linalg.norm(rot_offset - np.array([1.0, 0.0, 0.0, 0.0])) > 0.0
+        )
 
   
     def update_targets(self, human_data, offset_to_ground=False):
         # scale human data in local frame
         human_data = self.to_numpy(human_data)
         human_data = self.scale_human_data(human_data, self.human_root_name, self.human_scale_table)
-        human_data = self.offset_human_data(human_data, self.pos_offsets1, self.rot_offsets1)
+        human_data = self.offset_human_data(
+            human_data,
+            self.pos_offsets1,
+            self.rot_offsets1,
+            self.root_frame_pos_offsets,
+        )
         human_data = self.apply_ground_offset(human_data)
         if offset_to_ground:
             human_data = self.offset_human_data_to_ground(human_data)
@@ -177,51 +217,42 @@ class GeneralMotionRetargeting:
         self.update_targets(human_data, offset_to_ground)
 
         if self.use_ik_match_table1:
-            # Solve the IK problem
-            curr_error = self.error1()
-            dt = self.configuration.model.opt.timestep
-            vel1 = mink.solve_ik(
-                self.configuration, self.tasks1, dt, self.solver, self.damping, self.ik_limits
-            )
-            self.configuration.integrate_inplace(vel1, dt)
-            next_error = self.error1()
-            num_iter = 0
-            while curr_error - next_error > 0.001 and num_iter < self.max_iter:
-                curr_error = next_error
-                dt = self.configuration.model.opt.timestep
-                vel1 = mink.solve_ik(
-                    self.configuration, self.tasks1, dt, self.solver, self.damping, self.ik_limits
-                )
-                self.configuration.integrate_inplace(vel1, dt)
-                next_error = self.error1()
-                num_iter += 1
+            self.solve_task_set(self.tasks1, self.error1)
 
         if self.use_ik_match_table2:
-            curr_error = self.error2()
-            dt = self.configuration.model.opt.timestep
-            vel2 = mink.solve_ik(
-                self.configuration, self.tasks2, dt, self.solver, self.damping, self.ik_limits
-            )
-            self.configuration.integrate_inplace(vel2, dt)
-            next_error = self.error2()
-            num_iter = 0
-            while curr_error - next_error > 0.001 and num_iter < self.max_iter:
-                curr_error = next_error
-                # Solve the IK problem with the second task
-                dt = self.configuration.model.opt.timestep
-                vel2 = mink.solve_ik(
-                    self.configuration, self.tasks2, dt, self.solver, self.damping, self.ik_limits
-                )
-                self.configuration.integrate_inplace(vel2, dt)
-                
-                next_error = self.error2()
-                num_iter += 1
+            self.solve_task_set(self.tasks2, self.error2)
                 
             
         return self.configuration.data.qpos.copy()
 
+    def solve_task_set(self, tasks, error_func):
+        if not tasks:
+            return
+
+        dt = self.configuration.model.opt.timestep
+        if self.ik_mode == "single-pass" or self.max_iter == 0:
+            self.solve_ik_once(tasks, dt)
+            return
+
+        curr_error = error_func()
+        self.solve_ik_once(tasks, dt)
+        next_error = error_func()
+        num_iter = 0
+        while curr_error - next_error > self.min_improvement and num_iter < self.max_iter:
+            curr_error = next_error
+            self.solve_ik_once(tasks, dt)
+            next_error = error_func()
+            num_iter += 1
+
+    def solve_ik_once(self, tasks, dt):
+        vel = mink.solve_ik(
+            self.configuration, tasks, dt, self.solver, self.damping, self.ik_limits
+        )
+        self.configuration.integrate_inplace(vel, dt)
 
     def error1(self):
+        if not self.tasks1:
+            return 0.0
         return np.linalg.norm(
             np.concatenate(
                 [task.compute_error(self.configuration) for task in self.tasks1]
@@ -229,6 +260,8 @@ class GeneralMotionRetargeting:
         )
     
     def error2(self):
+        if not self.tasks2:
+            return 0.0
         return np.linalg.norm(
             np.concatenate(
                 [task.compute_error(self.configuration) for task in self.tasks2]
@@ -267,21 +300,33 @@ class GeneralMotionRetargeting:
 
         return human_data_global
     
-    def offset_human_data(self, human_data, pos_offsets, rot_offsets):
-        """the pos offsets are applied in the local frame"""
+    def offset_human_data(self, human_data, pos_offsets, rot_offsets, root_frame_pos_offsets=None):
+        """the pos offsets are applied in joint local frame; optional root offsets in human root frame"""
         offset_human_data = {}
+        root_frame_pos_offsets = root_frame_pos_offsets or {}
+        root_rotation = None
+        if self.human_root_name in human_data and root_frame_pos_offsets:
+            root_rotation = R.from_quat(human_data[self.human_root_name][1], scalar_first=True)
+
         for body_name in human_data.keys():
             pos, quat = human_data[body_name]
             offset_human_data[body_name] = [pos, quat]
-            # apply rotation offset first
-            updated_quat = (R.from_quat(quat, scalar_first=True) * rot_offsets[body_name]).as_quat(scalar_first=True)
-            offset_human_data[body_name][1] = updated_quat
+            if body_name not in pos_offsets or body_name not in rot_offsets:
+                updated_quat = quat
+            else:
+                # apply rotation offset first
+                updated_quat = (R.from_quat(quat, scalar_first=True) * rot_offsets[body_name]).as_quat(scalar_first=True)
+                offset_human_data[body_name][1] = updated_quat
             
-            local_offset = pos_offsets[body_name]
-            # compute the global position offset using the updated rotation
-            global_pos_offset = R.from_quat(updated_quat, scalar_first=True).apply(local_offset)
-            
-            offset_human_data[body_name][0] = pos + global_pos_offset
+                local_offset = pos_offsets[body_name]
+                # compute the global position offset using the updated rotation
+                global_pos_offset = R.from_quat(updated_quat, scalar_first=True).apply(local_offset)
+                
+                offset_human_data[body_name][0] = pos + global_pos_offset
+
+            if body_name in root_frame_pos_offsets and root_rotation is not None:
+                root_pos_offset = root_rotation.apply(root_frame_pos_offsets[body_name])
+                offset_human_data[body_name][0] = offset_human_data[body_name][0] + root_pos_offset
            
         return offset_human_data
             
