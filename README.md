@@ -284,6 +284,28 @@ bash teleop.sh
 ```
 You should be able to see the retargeted robot motion in a mujoco window.
 
+### IOBT Canonical Skeleton to G1 23DOF
+
+IOBT replay and live skeleton data use the same adapter, `iobt_canonical`. The adapter consumes Unity canonical skeleton metadata/frames, reconstructs world joints from bind offsets, converts them to MuJoCo coordinates, and generates wrist-roll-only hand targets for the G1 23DOF rubber hands.
+
+Replay:
+```bash
+conda run -n mujoco python scripts/iobt_to_robot.py \
+  --source replay \
+  --input /path/to/iobt_skeleton.jsonl \
+  --robot unitree_g1_23dof \
+  --save_path retargeting_data/iobt_canonical_g1_23dof.pkl \
+  --no-viewer
+```
+
+Live from the IOBT WebRTC receiver:
+```bash
+conda run -n mujoco python scripts/iobt_to_robot.py \
+  --source live \
+  --server_url http://127.0.0.1:8765 \
+  --robot unitree_g1_23dof
+```
+
 ### Retargeting from SMPL-X (AMASS, OMOMO) to Robot
 
 > [!NOTE]

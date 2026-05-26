@@ -6,6 +6,7 @@ from .data_loader import load_robot_motion
 from .kinematics_model import KinematicsModel
 
 from .neck_retarget import human_head_to_robot_neck
+from .iobt_utils import IOBTSkeletonSource
 
 try:
     from .xrobot_utils import XRobotStreamer, XRobotRecorder

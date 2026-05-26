@@ -72,11 +72,8 @@ IK_CONFIG_DICT = {
     "fbx_offline":{
         "unitree_g1": IK_CONFIG_ROOT / "fbx_offline_to_g1.json",
     },
-    "iobt_mocopi":{
-        "unitree_g1_23dof": IK_CONFIG_ROOT / "iobt_mocopi_to_g1_23dof.json",
-    },
-    "iobt_ovr_fullbody":{
-        "unitree_g1_23dof": IK_CONFIG_ROOT / "iobt_ovr_fullbody_to_g1_23dof.json",
+    "iobt_canonical":{
+        "unitree_g1_23dof": IK_CONFIG_ROOT / "iobt_canonical_to_g1_23dof.json",
     },
     
     "xrobot":{

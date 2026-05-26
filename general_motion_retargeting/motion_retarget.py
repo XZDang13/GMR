@@ -92,6 +92,7 @@ class GeneralMotionRetargeting:
         self.use_ik_match_table1 = ik_config["use_ik_match_table1"]
         self.use_ik_match_table2 = ik_config["use_ik_match_table2"]
         self.human_scale_table = ik_config["human_scale_table"]
+        self.human_scale_anchor_table = ik_config.get("human_scale_anchor_table", {})
         self.ground = ik_config["ground_height"] * np.array([0, 0, 1])
 
         self.solver = solver
@@ -107,6 +108,11 @@ class GeneralMotionRetargeting:
             key: np.array(value, dtype=float)
             for key, value in ik_config.get("root_frame_position_offsets", {}).items()
         }
+        self.joint_regularization = {
+            key: float(value)
+            for key, value in ik_config.get("joint_regularization", {}).items()
+        }
+        self.posture_task = None
 
         self.task_errors1 = {}
         self.task_errors2 = {}
@@ -167,14 +173,42 @@ class GeneralMotionRetargeting:
                 self.tasks2.append(task)
                 self.task_errors2[task] = []
 
+        self.setup_joint_regularization()
+
+    def setup_joint_regularization(self):
+        if not self.joint_regularization:
+            return
+
+        cost = np.zeros(self.model.nv)
+        dof_counts = {
+            int(mj.mjtJoint.mjJNT_FREE): 6,
+            int(mj.mjtJoint.mjJNT_BALL): 3,
+            int(mj.mjtJoint.mjJNT_SLIDE): 1,
+            int(mj.mjtJoint.mjJNT_HINGE): 1,
+        }
+        for joint_name, joint_cost in self.joint_regularization.items():
+            joint_id = mj.mj_name2id(self.model, mj.mjtObj.mjOBJ_JOINT, joint_name)
+            if joint_id < 0:
+                raise ValueError(f"Unknown joint in joint_regularization: {joint_name}")
+            dof_start = int(self.model.jnt_dofadr[joint_id])
+            dof_count = dof_counts[int(self.model.jnt_type[joint_id])]
+            cost[dof_start:dof_start + dof_count] = joint_cost
+
+        self.posture_task = mink.PostureTask(self.model, cost=cost, lm_damping=1)
+        self.posture_task.set_target(self.configuration.q.copy())
+        self.tasks2.append(self.posture_task)
+
     def should_create_task(self, pos_weight, rot_weight):
         return (
-            abs(float(pos_weight)) > self.task_weight_epsilon
-            or abs(float(rot_weight)) > self.task_weight_epsilon
+            np.any(np.abs(np.atleast_1d(pos_weight).astype(float)) > self.task_weight_epsilon)
+            or np.any(np.abs(np.atleast_1d(rot_weight).astype(float)) > self.task_weight_epsilon)
         )
 
     def should_store_offset(self, pos_weight, rot_weight, pos_offset, rot_offset):
-        if float(pos_weight) != 0.0 or float(rot_weight) != 0.0:
+        if (
+            np.any(np.atleast_1d(pos_weight).astype(float) != 0.0)
+            or np.any(np.atleast_1d(rot_weight).astype(float) != 0.0)
+        ):
             return True
         pos_offset = np.asarray(pos_offset, dtype=float)
         rot_offset = np.asarray(rot_offset, dtype=float)
@@ -187,7 +221,12 @@ class GeneralMotionRetargeting:
     def update_targets(self, human_data, offset_to_ground=False):
         # scale human data in local frame
         human_data = self.to_numpy(human_data)
-        human_data = self.scale_human_data(human_data, self.human_root_name, self.human_scale_table)
+        human_data = self.scale_human_data(
+            human_data,
+            self.human_root_name,
+            self.human_scale_table,
+            self.human_scale_anchor_table,
+        )
         human_data = self.offset_human_data(
             human_data,
             self.pos_offsets1,
@@ -275,28 +314,54 @@ class GeneralMotionRetargeting:
         return human_data
 
 
-    def scale_human_data(self, human_data, human_root_name, human_scale_table):
-        
-        human_data_local = {}
+    def scale_human_data(
+        self,
+        human_data,
+        human_root_name,
+        human_scale_table,
+        human_scale_anchor_table=None,
+    ):
+        human_scale_anchor_table = human_scale_anchor_table or {}
         root_pos, root_quat = human_data[human_root_name]
         
         # scale root
         scaled_root_pos = human_scale_table[human_root_name] * root_pos
-        
-        # scale other body parts in local frame
-        for body_name in human_data.keys():
-            if body_name not in human_scale_table:
-                continue
-            if body_name == human_root_name:
-                continue
+        scaled_positions = {human_root_name: scaled_root_pos}
+
+        def scaled_position(body_name, stack=None):
+            if body_name in scaled_positions:
+                return scaled_positions[body_name]
+            if body_name not in human_data or body_name not in human_scale_table:
+                raise KeyError(f"Cannot scale missing human body: {body_name}")
+            stack = set() if stack is None else stack
+            if body_name in stack:
+                raise ValueError(f"Cycle in human_scale_anchor_table at {body_name}")
+            stack.add(body_name)
+
+            anchor_name = human_scale_anchor_table.get(body_name, human_root_name)
+            if anchor_name == body_name:
+                raise ValueError(f"Human body {body_name} cannot scale relative to itself")
+            if anchor_name == human_root_name:
+                anchor_raw_pos = root_pos
+                anchor_scaled_pos = scaled_root_pos
             else:
-                # transform to local frame (only position)
-                human_data_local[body_name] = (human_data[body_name][0] - root_pos) * human_scale_table[body_name]
-            
-        # transform the human data back to the global frame
+                if anchor_name not in human_data:
+                    raise KeyError(f"Scale anchor {anchor_name} for {body_name} is missing")
+                anchor_raw_pos = human_data[anchor_name][0]
+                anchor_scaled_pos = scaled_position(anchor_name, stack)
+
+            scaled_positions[body_name] = (
+                anchor_scaled_pos
+                + (human_data[body_name][0] - anchor_raw_pos) * human_scale_table[body_name]
+            )
+            stack.remove(body_name)
+            return scaled_positions[body_name]
+
         human_data_global = {human_root_name: (scaled_root_pos, root_quat)}
-        for body_name in human_data_local.keys():
-            human_data_global[body_name] = (human_data_local[body_name] + scaled_root_pos, human_data[body_name][1])
+        for body_name in human_data.keys():
+            if body_name == human_root_name or body_name not in human_scale_table:
+                continue
+            human_data_global[body_name] = (scaled_position(body_name), human_data[body_name][1])
 
         return human_data_global
     
