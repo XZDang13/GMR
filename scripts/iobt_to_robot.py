@@ -63,7 +63,7 @@ def main() -> None:
     parser.add_argument("--source", choices=("replay", "live"), required=True)
     parser.add_argument("--input", default=None, help="Replay JSONL path. For live, follow this file directly.")
     parser.add_argument("--replay-file", default=None, help="Live JSONL file to follow instead of querying server.")
-    parser.add_argument("--server_url", default="http://127.0.0.1:8765")
+    parser.add_argument("--server_url", default="https://127.0.0.1:8080")
     parser.add_argument("--robot", choices=("unitree_g1_23dof",), default="unitree_g1_23dof")
     parser.add_argument("--save_path", default=None)
     parser.add_argument("--no-viewer", action="store_true")

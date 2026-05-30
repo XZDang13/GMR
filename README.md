@@ -300,9 +300,15 @@ conda run -n mujoco python scripts/iobt_to_robot.py \
 
 Live from the IOBT WebRTC receiver:
 ```bash
+cd /Users/xdang/Documents/IOBT/Tools/WebRtcSkeletonReceiver
+python3 server.py --save-replay --replay-dir replays
+```
+
+Then in the GMR repo:
+```bash
 conda run -n mujoco python scripts/iobt_to_robot.py \
   --source live \
-  --server_url http://127.0.0.1:8765 \
+  --server_url https://127.0.0.1:8080 \
   --robot unitree_g1_23dof
 ```
 

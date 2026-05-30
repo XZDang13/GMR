@@ -15,9 +15,6 @@ from scipy.spatial.transform import Rotation as R
 IOBT_CANONICAL_SRC_HUMAN = "iobt_canonical"
 CANONICAL_BIND_OFFSET_ENCODING = "RootWorldAndLocalRotationsWithBindOffsets"
 DEFAULT_CANONICAL_HUMAN_HEIGHT = 1.750136137
-CANONICAL_HEIGHT_SOURCE_OVERRIDES = {
-    "SMPLXBodyOnlyBindPose": DEFAULT_CANONICAL_HUMAN_HEIGHT,
-}
 
 CANONICAL_JOINT_NAMES = (
     "Hips",
@@ -81,10 +78,6 @@ HAND_FORWARD_LOCAL_AXIS = np.array([1.0, 0.0, 0.0])
 HAND_PALM_NORMAL_LOCAL_AXES = {
     "Left": np.array([1.0, 0.0, 0.0]),
     "Right": np.array([1.0, 0.0, 0.0]),
-}
-HAND_ROLL_LOCAL_CORRECTION_DEGREES = {
-    "Left": -90.0,
-    "Right": -90.0,
 }
 
 
@@ -214,13 +207,9 @@ class IOBTCanonicalProcessor:
         validate_iobt_metadata(metadata, self.required_joint_names)
         self.metadata = copy.deepcopy(metadata)
         self.joint_defs = list(metadata["joints"])
-        height_source = metadata.get("skeletonHeightSource")
-        if height_source in CANONICAL_HEIGHT_SOURCE_OVERRIDES:
-            self.actual_human_height = CANONICAL_HEIGHT_SOURCE_OVERRIDES[height_source]
-        else:
-            self.actual_human_height = float(
-                metadata.get("skeletonHeightMeters") or DEFAULT_CANONICAL_HUMAN_HEIGHT
-            )
+        self.actual_human_height = float(
+            metadata.get("skeletonHeightMeters") or DEFAULT_CANONICAL_HUMAN_HEIGHT
+        )
 
     def process_frame_event(self, event: Dict[str, Any]) -> IOBTSkeletonFrame:
         if self.metadata is None:
@@ -298,13 +287,12 @@ class IOBTCanonicalProcessor:
             rotations.append(rotation)
         return positions, rotations
 
-
 class IOBTSkeletonSource:
     def __init__(
         self,
         source: str,
         input_path: Optional[str] = None,
-        server_url: str = "http://127.0.0.1:8765",
+        server_url: str = "https://127.0.0.1:8080",
         replay_file: Optional[str] = None,
         start: Optional[int] = None,
         end: Optional[int] = None,
@@ -489,11 +477,7 @@ def _hand_roll_rotation(
     if np.linalg.det(matrix) < 0.0:
         y_axis = -y_axis
         matrix = np.column_stack([x_axis, y_axis, z_axis])
-    roll_rotation = R.from_matrix(matrix)
-    correction_degrees = HAND_ROLL_LOCAL_CORRECTION_DEGREES.get(side, 0.0)
-    if correction_degrees:
-        roll_rotation = roll_rotation * R.from_euler("x", correction_degrees, degrees=True)
-    return roll_rotation
+    return R.from_matrix(matrix)
 
 
 def _read_jsonl_events(path: Path) -> Iterator[Dict[str, Any]]:
