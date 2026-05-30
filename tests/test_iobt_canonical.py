@@ -8,9 +8,9 @@ from scipy.spatial.transform import Rotation as R
 
 from general_motion_retargeting.iobt_utils import (
     CANONICAL_BIND_OFFSET_ENCODING,
+    DEFAULT_CANONICAL_HUMAN_HEIGHT,
     IOBTSkeletonSource,
     add_hand_roll_targets,
-    add_upright_yaw_targets,
     unity_position_to_gmr,
     unity_rotation_to_gmr,
 )
@@ -42,15 +42,19 @@ JOINTS = [
 ]
 
 
-def write_synthetic_replay(path: Path) -> None:
+def write_synthetic_replay(
+    path: Path,
+    skeleton_height_meters: float = DEFAULT_CANONICAL_HUMAN_HEIGHT,
+    skeleton_height_source: str = "SyntheticBindPose",
+) -> None:
     metadata = {
         "version": 2,
         "source": "SyntheticIOBTCanonical",
         "coordinateSpace": "CanonicalLocal",
         "poseEncoding": CANONICAL_BIND_OFFSET_ENCODING,
         "bindPoseSource": "SyntheticBindPose",
-        "skeletonHeightMeters": 1.750136137,
-        "skeletonHeightSource": "SyntheticBindPose",
+        "skeletonHeightMeters": skeleton_height_meters,
+        "skeletonHeightSource": skeleton_height_source,
         "joints": [
             {
                 "index": index,
@@ -140,6 +144,30 @@ class IOBTCanonicalAdapterTest(unittest.TestCase):
             second_length = np.linalg.norm(second[child_name][0] - second[parent_name][0])
             np.testing.assert_allclose(first_length, second_length, atol=1e-8)
 
+    def test_smplx_body_only_height_uses_canonical_scale(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            replay_path = Path(tmp) / "synthetic_iobt.jsonl"
+            write_synthetic_replay(
+                replay_path,
+                skeleton_height_meters=1.66,
+                skeleton_height_source="SMPLXBodyOnlyBindPose",
+            )
+            source = IOBTSkeletonSource(source="replay", input_path=str(replay_path))
+
+        self.assertEqual(source.actual_human_height, DEFAULT_CANONICAL_HUMAN_HEIGHT)
+
+    def test_noncanonical_height_source_keeps_reported_height(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            replay_path = Path(tmp) / "synthetic_iobt.jsonl"
+            write_synthetic_replay(
+                replay_path,
+                skeleton_height_meters=1.66,
+                skeleton_height_source="MeasuredRuntimeSkeleton",
+            )
+            source = IOBTSkeletonSource(source="replay", input_path=str(replay_path))
+
+        self.assertEqual(source.actual_human_height, 1.66)
+
     def test_hand_roll_target_preserves_palm_roll_without_full_wrist_target(self):
         human_data = {
             "LeftLowerArm": [np.array([0.0, 0.0, 0.0]), np.array([1.0, 0.0, 0.0, 0.0])],
@@ -158,7 +186,7 @@ class IOBTCanonicalAdapterTest(unittest.TestCase):
         np.testing.assert_allclose(right_roll.apply([1.0, 0.0, 0.0]), [1.0, 0.0, 0.0], atol=1e-8)
         self.assertGreater((left_roll.inv() * right_roll).magnitude(), 1.0)
 
-    def test_hand_roll_target_uses_side_specific_palm_normals(self):
+    def test_hand_roll_target_applies_g1_wrist_roll_offsets(self):
         human_data = {
             "LeftLowerArm": [np.array([0.0, 0.0, 0.0]), np.array([1.0, 0.0, 0.0, 0.0])],
             "LeftHand": [
@@ -175,8 +203,10 @@ class IOBTCanonicalAdapterTest(unittest.TestCase):
 
         left_roll = R.from_quat(human_data["LeftHandRoll"][1], scalar_first=True)
         right_roll = R.from_quat(human_data["RightHandRoll"][1], scalar_first=True)
-        np.testing.assert_allclose(left_roll.apply([0.0, 0.0, 1.0]), [0.0, -1.0, 0.0], atol=1e-8)
-        np.testing.assert_allclose(right_roll.apply([0.0, 0.0, 1.0]), [0.0, 1.0, 0.0], atol=1e-8)
+        np.testing.assert_allclose(left_roll.apply([1.0, 0.0, 0.0]), [1.0, 0.0, 0.0], atol=1e-8)
+        np.testing.assert_allclose(right_roll.apply([1.0, 0.0, 0.0]), [1.0, 0.0, 0.0], atol=1e-8)
+        np.testing.assert_allclose(left_roll.apply([0.0, 0.0, 1.0]), [0.0, 0.0, 1.0], atol=1e-8)
+        np.testing.assert_allclose(right_roll.apply([0.0, 0.0, 1.0]), [0.0, 0.0, -1.0], atol=1e-8)
 
     def test_hand_roll_target_uses_side_specific_forearm_axis_fallback(self):
         left_data = {
@@ -194,23 +224,6 @@ class IOBTCanonicalAdapterTest(unittest.TestCase):
         right_roll = R.from_quat(right_data["RightHandRoll"][1], scalar_first=True)
         np.testing.assert_allclose(left_roll.apply([1.0, 0.0, 0.0]), [0.0, 1.0, 0.0], atol=1e-8)
         np.testing.assert_allclose(right_roll.apply([1.0, 0.0, 0.0]), [0.0, -1.0, 0.0], atol=1e-8)
-
-    def test_upright_yaw_targets_remove_root_pitch_and_roll(self):
-        human_data = {
-            "Hips": [
-                np.array([0.0, 0.0, 0.0]),
-                R.from_euler("xyz", [20, -15, 35], degrees=True).as_quat(scalar_first=True),
-            ],
-            "ChestCalibrated": [
-                np.array([0.0, 0.0, 1.0]),
-                R.from_euler("xyz", [-10, 25, -40], degrees=True).as_quat(scalar_first=True),
-            ],
-        }
-        add_upright_yaw_targets(human_data)
-
-        for target_name in ("HipsYaw", "ChestCalibratedYaw"):
-            target_rotation = R.from_quat(human_data[target_name][1], scalar_first=True)
-            np.testing.assert_allclose(target_rotation.apply([0.0, 0.0, 1.0]), [0.0, 0.0, 1.0], atol=1e-8)
 
     def test_gmr_can_initialize_and_retarget_synthetic_frames(self):
         try:
@@ -272,10 +285,10 @@ class IOBTCanonicalAdapterTest(unittest.TestCase):
         )
         human_data = {
             "Hips": [np.array([1.0, 0.0, 0.0]), np.array([1.0, 0.0, 0.0, 0.0])],
-            "ChestCalibrated": [np.array([1.0, 0.0, 1.0]), np.array([1.0, 0.0, 0.0, 0.0])],
+            "Chest": [np.array([1.0, 0.0, 1.0]), np.array([1.0, 0.0, 0.0, 0.0])],
             "LeftHand": [np.array([3.0, 0.0, 1.0]), np.array([1.0, 0.0, 0.0, 0.0])],
         }
-        scale_table = {"Hips": 1.0, "ChestCalibrated": 1.0, "LeftHand": 0.5}
+        scale_table = {"Hips": 1.0, "Chest": 1.0, "LeftHand": 0.5}
 
         root_scaled = retargeter.scale_human_data(
             {key: [value[0].copy(), value[1].copy()] for key, value in human_data.items()},
@@ -286,7 +299,7 @@ class IOBTCanonicalAdapterTest(unittest.TestCase):
             {key: [value[0].copy(), value[1].copy()] for key, value in human_data.items()},
             "Hips",
             scale_table,
-            {"LeftHand": "ChestCalibrated"},
+            {"LeftHand": "Chest"},
         )
 
         np.testing.assert_allclose(root_scaled["LeftHand"][0], [2.0, 0.0, 0.5])
@@ -301,13 +314,12 @@ class IOBTCanonicalAdapterTest(unittest.TestCase):
         )
         config = json.loads(config_path.read_text(encoding="utf-8"))
 
-        self.assertEqual(config["human_scale_table"]["HipsYaw"], 0.9)
         self.assertEqual(config["human_scale_table"]["LeftShoulder"], 0.7)
         self.assertEqual(config["human_scale_table"]["RightShoulder"], 0.7)
-        self.assertEqual(config["human_scale_table"]["ChestCalibrated"], 0.9)
-        self.assertEqual(config["human_scale_table"]["ChestCalibratedYaw"], 0.9)
         self.assertEqual(config["human_scale_table"]["LeftShoulderSocket"], 0.9)
         self.assertEqual(config["human_scale_table"]["RightShoulderSocket"], 0.9)
+        self.assertNotIn("LeftLowerArm", config["root_frame_position_offsets"])
+        self.assertNotIn("RightLowerArm", config["root_frame_position_offsets"])
         np.testing.assert_allclose(config["root_frame_position_offsets"]["LeftFoot"], [-0.08, 0.05, -0.03])
         np.testing.assert_allclose(config["root_frame_position_offsets"]["LeftToes"], [-0.08, 0.05, 0.0])
         np.testing.assert_allclose(config["root_frame_position_offsets"]["RightFoot"], [-0.08, -0.05, -0.03])
@@ -354,11 +366,11 @@ class IOBTCanonicalAdapterTest(unittest.TestCase):
         self.assertEqual(config["ik_match_table2"]["right_toe_link"][1], 80)
 
         anchor_table = config["human_scale_anchor_table"]
-        self.assertEqual(anchor_table["LeftShoulder"], "ChestCalibratedYaw")
+        self.assertEqual(anchor_table["LeftShoulder"], "Chest")
         self.assertEqual(anchor_table["LeftUpperArm"], "LeftShoulderSocket")
         self.assertEqual(anchor_table["LeftLowerArm"], "LeftUpperArm")
         self.assertEqual(anchor_table["LeftHandRoll"], "LeftLowerArm")
-        self.assertEqual(anchor_table["RightShoulder"], "ChestCalibratedYaw")
+        self.assertEqual(anchor_table["RightShoulder"], "Chest")
         self.assertEqual(anchor_table["RightUpperArm"], "RightShoulderSocket")
         self.assertEqual(anchor_table["RightLowerArm"], "RightUpperArm")
         self.assertEqual(anchor_table["RightHandRoll"], "RightLowerArm")
@@ -369,9 +381,9 @@ class IOBTCanonicalAdapterTest(unittest.TestCase):
 
         for table_name in ("ik_match_table1", "ik_match_table2"):
             table = config[table_name]
-            self.assertEqual(table["pelvis"][0], "HipsYaw")
+            self.assertEqual(table["pelvis"][0], "Hips")
             self.assertEqual(table["pelvis"][2], 4)
-            self.assertEqual(table["torso_link"][0], "ChestCalibratedYaw")
+            self.assertEqual(table["torso_link"][0], "Chest")
             self.assertEqual(table["torso_link"][1], 0)
             self.assertEqual(table["torso_link"][2], 6)
             self.assertEqual(table["left_shoulder_yaw_link"][0], "LeftShoulderSocket")

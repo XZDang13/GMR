@@ -15,6 +15,9 @@ from scipy.spatial.transform import Rotation as R
 IOBT_CANONICAL_SRC_HUMAN = "iobt_canonical"
 CANONICAL_BIND_OFFSET_ENCODING = "RootWorldAndLocalRotationsWithBindOffsets"
 DEFAULT_CANONICAL_HUMAN_HEIGHT = 1.750136137
+CANONICAL_HEIGHT_SOURCE_OVERRIDES = {
+    "SMPLXBodyOnlyBindPose": DEFAULT_CANONICAL_HUMAN_HEIGHT,
+}
 
 CANONICAL_JOINT_NAMES = (
     "Hips",
@@ -78,6 +81,10 @@ HAND_FORWARD_LOCAL_AXIS = np.array([1.0, 0.0, 0.0])
 HAND_PALM_NORMAL_LOCAL_AXES = {
     "Left": np.array([1.0, 0.0, 0.0]),
     "Right": np.array([1.0, 0.0, 0.0]),
+}
+HAND_ROLL_LOCAL_CORRECTION_DEGREES = {
+    "Left": -90.0,
+    "Right": -90.0,
 }
 
 
@@ -193,7 +200,6 @@ class IOBTCanonicalProcessor:
         self.metadata: Optional[Dict[str, Any]] = None
         self.joint_defs: List[Dict[str, Any]] = []
         self.actual_human_height = DEFAULT_CANONICAL_HUMAN_HEIGHT
-        self._initial_chest_local_rotation: Optional[R] = None
 
     def process_event(self, event: Dict[str, Any]) -> Optional[IOBTSkeletonFrame]:
         event_type = event.get("type")
@@ -208,10 +214,13 @@ class IOBTCanonicalProcessor:
         validate_iobt_metadata(metadata, self.required_joint_names)
         self.metadata = copy.deepcopy(metadata)
         self.joint_defs = list(metadata["joints"])
-        self.actual_human_height = float(
-            metadata.get("skeletonHeightMeters") or DEFAULT_CANONICAL_HUMAN_HEIGHT
-        )
-        self._initial_chest_local_rotation = None
+        height_source = metadata.get("skeletonHeightSource")
+        if height_source in CANONICAL_HEIGHT_SOURCE_OVERRIDES:
+            self.actual_human_height = CANONICAL_HEIGHT_SOURCE_OVERRIDES[height_source]
+        else:
+            self.actual_human_height = float(
+                metadata.get("skeletonHeightMeters") or DEFAULT_CANONICAL_HUMAN_HEIGHT
+            )
 
     def process_frame_event(self, event: Dict[str, Any]) -> IOBTSkeletonFrame:
         if self.metadata is None:
@@ -234,8 +243,6 @@ class IOBTCanonicalProcessor:
             gmr_rotation = unity_rotation_to_gmr(unity_rotations[index].as_quat())
             human_data[name] = [gmr_position, _normalize_quat_wxyz(gmr_rotation)]
 
-        self._add_torso_calibration_targets(human_data)
-        add_upright_yaw_targets(human_data)
         add_shoulder_socket_targets(human_data)
         if self.add_hand_roll_targets:
             add_hand_roll_targets(human_data)
@@ -290,25 +297,6 @@ class IOBTCanonicalProcessor:
             positions.append(np.asarray(position, dtype=float))
             rotations.append(rotation)
         return positions, rotations
-
-    def _add_torso_calibration_targets(self, human_data: Dict[str, List[np.ndarray]]) -> None:
-        if "Hips" not in human_data or "Chest" not in human_data:
-            add_torso_calibration_targets(human_data)
-            return
-
-        root_rotation = R.from_quat(human_data["Hips"][1], scalar_first=True)
-        chest_rotation = R.from_quat(human_data["Chest"][1], scalar_first=True)
-        chest_local_rotation = root_rotation.inv() * chest_rotation
-        if self._initial_chest_local_rotation is None:
-            self._initial_chest_local_rotation = chest_local_rotation
-
-        calibrated_rotation = root_rotation * (
-            chest_local_rotation * self._initial_chest_local_rotation.inv()
-        )
-        human_data["ChestCalibrated"] = [
-            np.asarray(human_data["Chest"][0], dtype=float).copy(),
-            calibrated_rotation.as_quat(scalar_first=True),
-        ]
 
 
 class IOBTSkeletonSource:
@@ -469,29 +457,6 @@ def add_shoulder_socket_targets(human_data: Dict[str, List[np.ndarray]]) -> None
         ]
 
 
-def add_torso_calibration_targets(human_data: Dict[str, List[np.ndarray]]) -> None:
-    if "Chest" not in human_data:
-        return
-    human_data["ChestCalibrated"] = [
-        np.asarray(human_data["Chest"][0], dtype=float).copy(),
-        np.asarray(human_data["Chest"][1], dtype=float).copy(),
-    ]
-
-
-def add_upright_yaw_targets(human_data: Dict[str, List[np.ndarray]]) -> None:
-    for source_name, target_name in (
-        ("Hips", "HipsYaw"),
-        ("ChestCalibrated", "ChestCalibratedYaw"),
-    ):
-        if source_name not in human_data:
-            continue
-        source_rotation = R.from_quat(human_data[source_name][1], scalar_first=True)
-        human_data[target_name] = [
-            np.asarray(human_data[source_name][0], dtype=float).copy(),
-            _upright_yaw_rotation(source_rotation).as_quat(scalar_first=True),
-        ]
-
-
 def _hand_roll_rotation(
     side: str,
     lower_position: np.ndarray,
@@ -524,16 +489,11 @@ def _hand_roll_rotation(
     if np.linalg.det(matrix) < 0.0:
         y_axis = -y_axis
         matrix = np.column_stack([x_axis, y_axis, z_axis])
-    return R.from_matrix(matrix)
-
-
-def _upright_yaw_rotation(rotation: R) -> R:
-    forward = rotation.apply(np.array([1.0, 0.0, 0.0]))
-    planar_forward = _normalize(np.array([forward[0], forward[1], 0.0]))
-    if planar_forward is None:
-        planar_forward = np.array([1.0, 0.0, 0.0])
-    yaw = np.arctan2(planar_forward[1], planar_forward[0])
-    return R.from_euler("z", yaw)
+    roll_rotation = R.from_matrix(matrix)
+    correction_degrees = HAND_ROLL_LOCAL_CORRECTION_DEGREES.get(side, 0.0)
+    if correction_degrees:
+        roll_rotation = roll_rotation * R.from_euler("x", correction_degrees, degrees=True)
+    return roll_rotation
 
 
 def _read_jsonl_events(path: Path) -> Iterator[Dict[str, Any]]:

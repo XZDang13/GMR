@@ -23,10 +23,7 @@
     },
     "human_scale_table": {
         "Hips": 0.9,
-        "HipsYaw": 0.9,
         "Chest": 0.9,
-        "ChestCalibrated": 0.9,
-        "ChestCalibratedYaw": 0.9,
         "UpperChest": 0.9,
         "Head": 0.9,
         "LeftShoulder": 0.7,
@@ -51,13 +48,13 @@
         "RightHandRoll": 0.72
     },
     "human_scale_anchor_table": {
-        "LeftShoulder": "ChestCalibratedYaw",
+        "LeftShoulder": "Chest",
         "LeftShoulderSocket": "LeftShoulder",
         "LeftUpperArm": "LeftShoulderSocket",
         "LeftLowerArm": "LeftUpperArm",
         "LeftHand": "LeftLowerArm",
         "LeftHandRoll": "LeftLowerArm",
-        "RightShoulder": "ChestCalibratedYaw",
+        "RightShoulder": "Chest",
         "RightShoulderSocket": "RightShoulder",
         "RightUpperArm": "RightShoulderSocket",
         "RightLowerArm": "RightUpperArm",
@@ -65,7 +62,7 @@
         "RightHandRoll": "RightLowerArm"
     },
     "ik_match_table1": {
-        "pelvis": ["HipsYaw", 0, 4, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
+        "pelvis": ["Hips", 0, 4, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
         "left_hip_roll_link": ["LeftUpperLeg", 0, 0, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
         "left_knee_link": ["LeftLowerLeg", 0, 0, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
         "left_ankle_roll_link": ["LeftFoot", 0, 0, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
@@ -74,7 +71,7 @@
         "right_knee_link": ["RightLowerLeg", 0, 0, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
         "right_ankle_roll_link": ["RightFoot", 0, 0, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
         "right_toe_link": ["RightToes", 0, 0, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
-        "torso_link": ["ChestCalibratedYaw", 0, 6, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
+        "torso_link": ["Chest", 0, 6, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
         "left_shoulder_yaw_link": ["LeftShoulderSocket", 0, 0, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
         "left_elbow_link": ["LeftLowerArm", 0, 0, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
         "left_rubber_hand_link": ["LeftHandRoll", 0, 0, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
@@ -83,7 +80,7 @@
         "right_rubber_hand_link": ["RightHandRoll", 0, 0, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]]
     },
     "ik_match_table2": {
-        "pelvis": ["HipsYaw", 12, 4, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
+        "pelvis": ["Hips", 12, 4, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
         "left_hip_roll_link": ["LeftUpperLeg", 5, 0, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
         "left_knee_link": ["LeftLowerLeg", 18, 0, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
         "left_ankle_roll_link": ["LeftFoot", 36, 0, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
@@ -92,7 +89,7 @@
         "right_knee_link": ["RightLowerLeg", 18, 0, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
         "right_ankle_roll_link": ["RightFoot", 36, 0, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
         "right_toe_link": ["RightToes", 80, 0, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
-        "torso_link": ["ChestCalibratedYaw", 0, 6, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
+        "torso_link": ["Chest", 0, 6, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
         "left_shoulder_yaw_link": ["LeftShoulderSocket", 0, 0, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
         "left_elbow_link": ["LeftLowerArm", 12, 0, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
         "left_rubber_hand_link": ["LeftHandRoll", 12, [0.1, 0, 0], [0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
